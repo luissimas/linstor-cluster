@@ -1,0 +1,85 @@
+---
+- name: Add LINBIT repository
+  hosts: all
+  become: true
+  tasks:
+    - name: Add repository
+      ansible.builtin.apt_repository:
+        repo: ppa:linbit/linbit-drbd9-stack
+        state: present
+
+- name: Install Linstor satellite
+  hosts: satellites
+  become: true
+  tasks:
+    - name: Install packages
+      ansible.builtin.apt:
+        pkg:
+          - drbd-dkms
+          - drbd-utils
+          - linstor-satellite
+        state: present
+        update_cache: true
+    - name: Start service
+      ansible.builtin.systemd:
+        service: linstor-satellite
+        state: started
+
+- name: Install Linstor controller
+  hosts: controllers
+  become: true
+  tasks:
+    - name: Install Linstor controller
+      ansible.builtin.apt:
+        pkg:
+          - linstor-controller
+          - linstor-client
+          - linstor-gui
+        state: present
+        update_cache: true
+    - name: Enable and start service
+      ansible.builtin.systemd:
+        service: linstor-controller
+        state: started
+        enabled: true
+
+- name: Add satellite nodes
+  hosts: controllers
+  become: true
+  tasks:
+    - name: List satellite nodes
+      ansible.builtin.command: linstor --machine-readable node list
+      register: satellite_nodes_output
+      changed_when: false
+    - name: Parse satellite node names
+      ansible.builtin.set_fact:
+        existing_satellite_nodes: "{{ satellite_nodes_output.stdout | from_json | json_query('[].name') }}"
+    - name: Add satellite nodes
+      ansible.builtin.command: linstor node create {{ item }} {{ hostvars[item].ansible_facts.default_ipv4.address }} --node-type satellite
+      register: create_node_output
+      loop: "{{ groups['satellites'] }}"
+      when: item not in existing_satellite_nodes
+      changed_when: "create_node_output.rc == 0"
+
+- name: Create storage pools
+  hosts: controllers
+  become: true
+  tasks:
+    - name: List storage pools
+      ansible.builtin.command: linstor --machine-readable storage-pool list
+      register: storage_pool_output
+      changed_when: false
+    - name: Parse storage pools
+      ansible.builtin.set_fact:
+        satellites_without_storage_pools: >-
+          {{
+            groups['satellites'] | difference(
+              storage_pool_output.stdout | from_json | json_query('[0][?provider_kind!=`DISKLESS`].node_name') | unique
+            )
+          }}
+    - name: Create storage pool
+      ansible.builtin.command: linstor physical-storage create-device-pool --pool-name lvm LVMTHIN {{ item }} /dev/vdb --storage-pool lvm-thin
+      register: create_storage_pool_output
+      loop: "{{ groups['satellites'] }}"
+      when: item in satellites_without_storage_pools
+      changed_when: "create_storage_pool_output.rc == 0"
