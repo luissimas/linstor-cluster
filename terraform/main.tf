@@ -18,7 +18,10 @@ resource "mgc_virtual_machine_instances" "controller_instance" {
   network = {
     associate_public_ip = true
     interface = {
-      security_groups = [{ id = mgc_network_security_groups.controller.id }]
+      security_groups = [
+        { id = mgc_network_security_groups.controller.id },
+        { id = var.default_security_group_id }
+      ]
     }
   }
   ssh_key_name = mgc_ssh_keys.ssh_key.name

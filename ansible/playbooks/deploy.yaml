@@ -24,6 +24,7 @@
       ansible.builtin.systemd:
         service: linstor-satellite
         state: started
+        enabled: true
 
 - name: Install Linstor controller
   hosts: controllers

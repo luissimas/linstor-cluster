@@ -3,6 +3,14 @@ variable "public_key" {
   type        = string
 }
 
+# HACK: since the provider removes the default security group from instances
+# if we assign a new one, we have to manually assign the default security group
+# back to the instances
+variable "default_security_group_id" {
+  description = "The ID of the default security group"
+  type        = string
+}
+
 variable "satellite_count" {
   description = "The number of Linstor satellite nodes to create"
   type        = number
