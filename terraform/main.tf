@@ -17,6 +17,9 @@ resource "mgc_virtual_machine_instances" "controller_instance" {
   }
   network = {
     associate_public_ip = true
+    interface = {
+      security_groups = [{ id = mgc_network_security_groups.controller.id }]
+    }
   }
   ssh_key_name = mgc_ssh_keys.ssh_key.name
 }
@@ -49,4 +52,32 @@ resource "mgc_block_storage_volume_attachment" "satellite_volumes" {
   for_each           = local.satellite_indexes
   block_storage_id   = mgc_block_storage_volumes.satellite_volume[each.value].id
   virtual_machine_id = mgc_virtual_machine_instances.satellite_instance[each.value].id
+}
+
+resource "mgc_network_security_groups" "controller" {
+  name                  = "controller"
+  description           = "Security group for Linstor controller instances"
+  disable_default_rules = false
+}
+
+resource "mgc_network_security_groups_rules" "allow_ssh" {
+  description       = "Allow incoming SSH traffic"
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  port_range_min    = 22
+  port_range_max    = 22
+  protocol          = "tcp"
+  remote_ip_prefix  = "0.0.0.0/0"
+  security_group_id = mgc_network_security_groups.controller.id
+}
+
+resource "mgc_network_security_groups_rules" "allow_3370" {
+  description       = "Allow incoming TCP traffic on port 3370"
+  direction         = "ingress"
+  ethertype         = "IPv4"
+  port_range_min    = 3370
+  port_range_max    = 3370
+  protocol          = "tcp"
+  remote_ip_prefix  = "0.0.0.0/0"
+  security_group_id = mgc_network_security_groups.controller.id
 }
